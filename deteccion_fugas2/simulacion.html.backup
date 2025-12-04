@@ -1,0 +1,2157 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Detección de Fugas - Simulación 3D</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            /* Dark mode background con gradiente animado */
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+            background-size: 200% 200%;
+            animation: gradientShift 15s ease infinite;
+            overflow: hidden;
+            color: #e2e8f0;
+        }
+
+        @keyframes gradientShift {
+
+            0%,
+            100% {
+                background-position: 0% 50%;
+            }
+
+            50% {
+                background-position: 100% 50%;
+            }
+        }
+
+        /* Canvas container con transición suave */
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #canvas-container.panel-open {
+            width: calc(100vw - 320px);
+            margin-left: 320px;
+        }
+
+        /* Responsive para móviles */
+        @media (max-width: 768px) {
+            #canvas-container.panel-open {
+                width: 100vw;
+                margin-left: 0;
+            }
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        /* Control panel tab con glassmorphism dark */
+        .control-panel-tab {
+            position: fixed;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(12px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(148, 163, 184, 0.1);
+            border-radius: 0 16px 16px 0;
+            padding: 20px 12px;
+            pointer-events: auto;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-panel-tab.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .control-panel-tab:hover {
+            background: rgba(51, 65, 85, 0.9);
+            padding-right: 16px;
+            box-shadow: 0 12px 40px rgba(139, 92, 246, 0.3);
+        }
+
+        .control-panel-tab svg {
+            width: 28px;
+            height: 28px;
+            color: #a78bfa;
+        }
+
+        /* Control panel dark mode premium */
+        .control-panel {
+            position: fixed;
+            top: 0;
+            left: -320px;
+            width: 320px;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            box-shadow: 2px 0 40px rgba(0, 0, 0, 0.5);
+            border-right: 1px solid rgba(148, 163, 184, 0.1);
+            padding: 24px;
+            pointer-events: auto;
+            overflow-y: auto;
+            transition: left 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 99;
+        }
+
+        .control-panel.open {
+            left: 0;
+        }
+
+        .control-panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid rgba(139, 92, 246, 0.2);
+        }
+
+        .control-panel-header h2 {
+            font-size: 20px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #a78bfa 0%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .close-panel-btn {
+            background: rgba(139, 92, 246, 0.1);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            cursor: pointer;
+            padding: 8px;
+            color: #a78bfa;
+            transition: all 0.2s ease;
+            border-radius: 8px;
+        }
+
+        .close-panel-btn:hover {
+            background: rgba(139, 92, 246, 0.2);
+            transform: scale(1.05);
+        }
+
+        .leak-controls {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        /* Leak checkbox con estilo dark premium */
+        .leak-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            background: rgba(30, 41, 59, 0.5);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .leak-checkbox:hover {
+            background: rgba(51, 65, 85, 0.6);
+            border-color: rgba(139, 92, 246, 0.3);
+            transform: translateX(4px);
+        }
+
+        .leak-checkbox input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+            accent-color: #a78bfa;
+        }
+
+        .leak-checkbox label {
+            flex: 1;
+            font-size: 14px;
+            color: #e2e8f0;
+            cursor: pointer;
+            user-select: none;
+            font-weight: 500;
+        }
+
+        .leak-checkbox.active {
+            background: rgba(239, 68, 68, 0.15);
+            border-left: 3px solid #ef4444;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+        }
+
+        .magnitude-slider-container {
+            margin-top: 8px;
+            padding: 12px;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 8px;
+            display: none;
+        }
+
+        .magnitude-slider-container.visible {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .magnitude-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .magnitude-value {
+            font-weight: 700;
+            color: #ef4444;
+            text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        .magnitude-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: rgba(51, 65, 85, 0.5);
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .magnitude-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        .magnitude-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.3);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.8);
+        }
+
+        .magnitude-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+        }
+
+        .magnitude-slider::-moz-range-thumb:hover {
+            transform: scale(1.3);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.8);
+        }
+
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 14px 20px;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        /* Reset button con gradiente premium */
+        button.reset-btn {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+        }
+
+        button.reset-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.6);
+        }
+
+        /* Estilos para rangos personalizados */
+        .custom-ranges {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 12px;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+        }
+
+        .custom-ranges h3 {
+            font-size: 16px;
+            color: #a78bfa;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        .range-group {
+            margin-bottom: 15px;
+        }
+
+        .range-group h4 {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .range-input {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+            font-size: 12px;
+        }
+
+        .range-input label {
+            color: #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .range-field {
+            width: 60px;
+            padding: 4px 6px;
+            background: rgba(15, 23, 42, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-size: 11px;
+        }
+
+        .range-field:focus {
+            outline: none;
+            border-color: #a78bfa;
+            box-shadow: 0 0 5px rgba(139, 92, 246, 0.3);
+        }
+
+        #apply-ranges-btn {
+            width: 100%;
+            padding: 10px;
+            font-size: 12px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #apply-ranges-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+        }
+
+        @keyframes blink-alert {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.6;
+            }
+        }
+
+        .sensor-value.blinking {
+            animation: blink-alert 0.5s ease-in-out 3;
+        }
+
+        /* Sensor readings panel - Colapsable, draggable y responsive */
+        .sensor-readings {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(139, 92, 246, 0.2);
+            border-radius: 16px;
+            padding: 20px;
+            pointer-events: auto;
+            /* Aumentar el tamaño del panel de datos */
+            min-width: 300px;
+            max-height: 100vh;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            cursor: move;
+            border: 1px solid rgba(139, 92, 246, 0.1);
+        }
+
+        /* Header colapsable para el panel de sensores */
+        .sensor-readings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(139, 92, 246, 0.2);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .sensor-readings-header h2 {
+            font-size: 18px;
+            font-weight: 600;
+            background: linear-gradient(135deg, #a78bfa 0%, #ec4899 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .collapse-btn {
+            background: rgba(139, 92, 246, 0.1);
+            border: 1px solid rgba(139, 92, 246, 0.2);
+            border-radius: 8px;
+            padding: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .collapse-btn:hover {
+            background: rgba(139, 92, 246, 0.2);
+            transform: scale(1.1);
+        }
+
+        .collapse-btn svg {
+            width: 20px;
+            height: 20px;
+            color: #a78bfa;
+            transition: transform 0.3s ease;
+        }
+
+        .sensor-readings.collapsed .collapse-btn svg {
+            transform: rotate(180deg);
+        }
+
+        .sensor-readings-content {
+            max-height: 70vh;
+            overflow-y: auto;
+            transition: all 0.3s ease;
+        }
+
+        .sensor-readings.collapsed .sensor-readings-content {
+            max-height: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .sensor-readings.collapsed {
+            min-width: auto;
+            width: auto;
+        }
+
+        /* Responsive: En móviles, el panel se minimiza automáticamente */
+        @media (max-width: 768px) {
+            .sensor-readings {
+                top: 10px;
+                right: 10px;
+                left: 10px;
+                min-width: auto;
+                max-width: calc(100vw - 20px);
+            }
+
+            .sensor-readings.collapsed {
+                right: 10px;
+                left: auto;
+                width: auto;
+            }
+        }
+
+        .sensor-group {
+            margin-bottom: 20px;
+        }
+
+        .sensor-group h3 {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+        }
+
+        /* Sensor items con glassmorphism dark */
+        .sensor-item {
+            background: rgba(30, 41, 59, 0.6);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 10px;
+            border-left: 3px solid #10b981;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .sensor-item:hover {
+            background: rgba(51, 65, 85, 0.7);
+            transform: translateX(-4px);
+            box-shadow: 0 4px 20px rgba(139, 92, 246, 0.15);
+        }
+
+        .sensor-item.alert {
+            border-left-color: #ef4444;
+            background: rgba(239, 68, 68, 0.1);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
+            }
+
+            50% {
+                box-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
+            }
+        }
+
+        .sensor-item.status-error {
+            border-left-color: #64748b;
+            background: rgba(100, 116, 139, 0.1);
+        }
+
+        .sensor-label {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .sensor-value {
+            font-size: 30px;
+            font-weight: 700;
+            color: #e2e8f0;
+            cursor: text;
+            text-shadow: 0 0 10px rgba(226, 232, 240, 0.3);
+        }
+
+        .sensor-unit {
+            font-size: 13px;
+            color: #94a3b8;
+            margin-left: 6px;
+            font-weight: 400;
+        }
+
+        /* Status panel con glassmorphism dark */
+        .status-panel {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(148, 163, 184, 0.1);
+            border-radius: 16px;
+            padding: 16px 20px;
+            pointer-events: auto;
+            min-width: 280px;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .status-panel.normal {
+            border-left: 4px solid #10b981;
+            box-shadow: 0 8px 32px rgba(16, 185, 129, 0.2);
+        }
+
+        .status-panel.alert {
+            border-left: 4px solid #ef4444;
+            box-shadow: 0 8px 32px rgba(239, 68, 68, 0.3);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .status-panel.status-error {
+            border-left: 4px solid #64748b;
+        }
+
+        .status-text {
+            font-size: 14px;
+            line-height: 1.6;
+            font-weight: 600;
+        }
+
+        .status-text.normal {
+            color: #10b981;
+            text-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+        }
+
+        .status-text.warning {
+            color: #f59e0b;
+        }
+
+        .status-text.alert {
+            color: #ef4444;
+            text-shadow: 0 0 10px rgba(239, 68, 68, 0.3);
+        }
+
+        /* Mode toggle con diseño premium */
+        .mode-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 12px;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .toggle {
+            width: 56px;
+            height: 30px;
+            background: rgba(51, 65, 85, 0.5);
+            border-radius: 9999px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s ease;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .toggle.on {
+            background: linear-gradient(135deg, #10b981, #059669);
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+        }
+
+        .toggle-thumb {
+            width: 26px;
+            height: 26px;
+            background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+            border-radius: 50%;
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            transition: left 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .toggle.on .toggle-thumb {
+            left: 28px;
+        }
+
+        .badge {
+            display: inline-block;
+            font-size: 12px;
+            padding: 6px 12px;
+            border-radius: 9999px;
+            background: rgba(51, 65, 85, 0.5);
+            color: #94a3b8;
+            font-weight: 600;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .badge.live {
+            background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(3, 105, 161, 0.2));
+            color: #38bdf8;
+            border-color: rgba(14, 165, 233, 0.3);
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.3);
+        }
+
+        /* Scrollbar personalizado dark */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.3);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(139, 92, 246, 0.5);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(139, 92, 246, 0.7);
+        }
+
+        /* Animaciones de entrada */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .sensor-readings,
+        .status-panel,
+        .control-panel-tab {
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        .sensor-readings {
+            animation-delay: 0.2s;
+        }
+
+        .status-panel {
+            animation-delay: 0.4s;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="canvas-container"></div>
+
+    <div class="ui-overlay">
+        <div class="control-panel-tab" id="panel-tab" title="Abrir Panel de Control">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+        </div>
+
+        <div class="control-panel" id="control-panel">
+            <div class="control-panel-header">
+                <h2>Panel de Simulación</h2>
+                <button class="close-panel-btn" id="close-panel-btn" title="Cerrar Panel">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+
+            <div class="mode-toggle">
+                <div>
+                    <div class="badge" id="mode-label">Modo: Simulación</div>
+                </div>
+                <div id="mode-toggle" class="toggle" title="Cambiar a Modo Live">
+                    <div class="toggle-thumb"></div>
+                </div>
+            </div>
+
+            <div class="leak-controls">
+                <div class="leak-checkbox" id="tramo1-container">
+                    <input type="checkbox" id="tramo1" />
+                    <label for="tramo1">Fuga en Tramo 1</label>
+                </div>
+                <div class="magnitude-slider-container" id="magnitude1-container">
+                    <div class="magnitude-label">
+                        <span>Magnitud</span>
+                        <span class="magnitude-value" id="magnitude1-value">50%</span>
+                    </div>
+                    <input type="range" min="1" max="100" value="50" class="magnitude-slider" id="magnitude1-slider" />
+                </div>
+
+                <div class="leak-checkbox" id="tramo2-container">
+                    <input type="checkbox" id="tramo2" />
+                    <label for="tramo2">Fuga en Tramo 2</label>
+                </div>
+                <div class="magnitude-slider-container" id="magnitude2-container">
+                    <div class="magnitude-label">
+                        <span>Magnitud</span>
+                        <span class="magnitude-value" id="magnitude2-value">50%</span>
+                    </div>
+                    <input type="range" min="1" max="100" value="50" class="magnitude-slider" id="magnitude2-slider" />
+                </div>
+
+                <div class="leak-checkbox" id="tramo3-container">
+                    <input type="checkbox" id="tramo3" />
+                    <label for="tramo3">Fuga en Tramo 3</label>
+                </div>
+                <div class="magnitude-slider-container" id="magnitude3-container">
+                    <div class="magnitude-label">
+                        <span>Magnitud</span>
+                        <span class="magnitude-value" id="magnitude3-value">50%</span>
+                    </div>
+                    <input type="range" min="1" max="100" value="50" class="magnitude-slider" id="magnitude3-slider" />
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button class="reset-btn" id="reset-all-btn">
+                    <span>Restablecer Sistema</span>
+                </button>
+            </div>
+
+            <!-- SECCIÓN NUEVA: RANGOS PERSONALIZADOS -->
+            <div class="custom-ranges">
+                <h3>📊 Rangos Personalizados</h3>
+
+                <div class="range-group">
+                    <h4>Presión (PSI)</h4>
+                    <div class="range-input">
+                        <label>P1 Mín: <input type="number" id="p1-min" value="40" class="range-field"></label>
+                        <label>Máx: <input type="number" id="p1-max" value="50" class="range-field"></label>
+                    </div>
+                    <div class="range-input">
+                        <label>P2 Mín: <input type="number" id="p2-min" value="38" class="range-field"></label>
+                        <label>Máx: <input type="number" id="p2-max" value="48" class="range-field"></label>
+                    </div>
+                    <div class="range-input">
+                        <label>P3 Mín: <input type="number" id="p3-min" value="36" class="range-field"></label>
+                        <label>Máx: <input type="number" id="p3-max" value="46" class="range-field"></label>
+                    </div>
+                </div>
+
+                <div class="range-group">
+                    <h4>Flujo (L/min)</h4>
+                    <div class="range-input">
+                        <label>F1 Mín: <input type="number" id="f1-min" value="80" class="range-field"></label>
+                        <label>Máx: <input type="number" id="f1-max" value="120" class="range-field"></label>
+                    </div>
+                    <div class="range-input">
+                        <label>F2 Mín: <input type="number" id="f2-min" value="75" class="range-field"></label>
+                        <label>Máx: <input type="number" id="f2-max" value="115" class="range-field"></label>
+                    </div>
+                    <div class="range-input">
+                        <label>F3 Mín: <input type="number" id="f3-min" value="70" class="range-field"></label>
+                        <label>Máx: <input type="number" id="f3-max" value="110" class="range-field"></label>
+                    </div>
+                </div>
+
+
+
+
+                <button id="apply-ranges-btn">✅ Aplicar Rangos</button>
+            </div>
+        </div>
+
+        <!-- Panel de lecturas con header colapsable y draggable -->
+        <div class="sensor-readings" id="sensor-readings">
+            <div class="sensor-readings-header" id="sensor-header">
+                <h2>Lecturas de Sensores</h2>
+                <div class="collapse-btn" id="collapse-btn">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </div>
+            </div>
+
+            <div class="sensor-readings-content">
+                <div class="sensor-group">
+                    <h3>Sensores de Presión</h3>
+                    <div class="sensor-item" id="pressure1">
+                        <div class="sensor-label">Presión 1 (P1 - Entrada)</div>
+                        <div class="sensor-value">5.0<span class="sensor-unit">bar</span></div>
+                    </div>
+                    <div class="sensor-item" id="pressure2">
+                        <div class="sensor-label">Presión 2 (P2 - Medio)</div>
+                        <div class="sensor-value">4.5<span class="sensor-unit">bar</span></div>
+                    </div>
+                    <div class="sensor-item" id="pressure3">
+                        <div class="sensor-label">Presión 3 (P3 - Salida)</div>
+                        <div class="sensor-value">4.0<span class="sensor-unit">bar</span></div>
+                    </div>
+                </div>
+
+                <div class="sensor-group">
+                    <h3>Sensores de Flujo</h3>
+                    <div class="sensor-item" id="flow1">
+                        <div class="sensor-label">Flujo 1 (F1 - Entrada)</div>
+                        <div class="sensor-value">100<span class="sensor-unit">L/min</span></div>
+                    </div>
+                    <div class="sensor-item" id="flow2">
+                        <div class="sensor-label">Flujo 2 (F2 - Medio)</div>
+                        <div class="sensor-value">100<span class="sensor-unit">L/min</span></div>
+                    </div>
+                    <div class="sensor-item" id="flow3">
+                        <div class="sensor-label">Flujo 3 (F3 - Salida)</div>
+                        <div class="sensor-value">100<span class="sensor-unit">L/min</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="status-panel normal" id="status-panel">
+            <div class="status-text normal" id="status-text">
+                ✓ Sistema operando normally
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <!-- Script para hacer el panel draggable y colapsable -->
+    <script>
+
+        // Funcionalidad de colapsar panel de sensores
+        document.addEventListener('DOMContentLoaded', () => {
+            const sensorReadings = document.getElementById('sensor-readings');
+            const collapseBtn = document.getElementById('collapse-btn');
+            const sensorHeader = document.getElementById('sensor-header');
+
+            // Toggle collapse
+            sensorHeader.addEventListener('click', () => {
+                sensorReadings.classList.toggle('collapsed');
+            });
+
+            // Hacer el panel draggable
+            let isDragging = false;
+            let currentX;
+            let currentY;
+            let initialX;
+            let initialY;
+            let xOffset = 0;
+            let yOffset = 0;
+
+            sensorHeader.addEventListener('mousedown', dragStart);
+            sensorHeader.addEventListener('touchstart', dragStart);
+
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('touchmove', drag);
+
+            document.addEventListener('mouseup', dragEnd);
+            document.addEventListener('touchend', dragEnd);
+
+            function dragStart(e) {
+                if (e.type === "touchstart") {
+                    initialX = e.touches[0].clientX - xOffset;
+                    initialY = e.touches[0].clientY - yOffset;
+                } else {
+                    initialX = e.clientX - xOffset;
+                    initialY = e.clientY - yOffset;
+                }
+
+                if (e.target === sensorHeader || e.target.closest('.sensor-readings-header')) {
+                    isDragging = true;
+                    sensorReadings.style.cursor = 'grabbing';
+                }
+            }
+
+            function drag(e) {
+                if (isDragging) {
+                    e.preventDefault();
+
+                    if (e.type === "touchmove") {
+                        currentX = e.touches[0].clientX - initialX;
+                        currentY = e.touches[0].clientY - initialY;
+                    } else {
+                        currentX = e.clientX - initialX;
+                        currentY = e.clientY - initialY;
+                    }
+
+                    xOffset = currentX;
+                    yOffset = currentY;
+
+                    setTranslate(currentX, currentY, sensorReadings);
+                }
+            }
+
+            function dragEnd(e) {
+                initialX = currentX;
+                initialY = currentY;
+                isDragging = false;
+                sensorReadings.style.cursor = 'move';
+            }
+
+            function setTranslate(xPos, yPos, el) {
+                el.style.transform = `translate3d(${xPos}px, ${yPos}px, 0)`;
+            }
+
+            // Auto-collapse en móviles
+            if (window.innerWidth <= 768) {
+                sensorReadings.classList.add('collapsed');
+            }
+        });
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- CONFIGURACIÓN Y CONSTANTES ---
+        const PSI_PER_BAR = 14.5038;
+        const BAR_PER_PSI = 1 / PSI_PER_BAR;
+
+        // Valores base para la simulación (Editables por el usuario)
+        let baseValues = {
+            p1: 5.0, // BAR
+            p2: 4.5,
+            p3: 4.0,
+            f1: 100, // L/min
+            f2: 100,
+            f3: 100
+        };
+
+        // Estado actual del sistema
+        let systemState = {
+            p1: { value: 5.0, unit: 'bar' },
+            p2: { value: 4.5, unit: 'bar' },
+            p3: { value: 4.0, unit: 'bar' },
+            f1: { value: 100, unit: 'L/min' },
+            f2: { value: 100, unit: 'L/min' },
+            f3: { value: 100, unit: 'L/min' }
+        };
+
+        const activeLeaks = { tramo1: false, tramo2: false, tramo3: false };
+        const leakMagnitudes = { tramo1: 0.5, tramo2: 0.5, tramo3: 0.5 };
+        let mode = 'simulation';
+        let apiInterval = null;
+        let rangosAlertas = []; // Rangos de alerta desde la base de datos
+
+        // --- RANGOS PERSONALIZADOS PARA SIMULACIÓN ---
+        // En la sección de rangos personalizados, cambia los valores por defecto:
+        let customRanges = {
+            p1: { min: 60, max: 80 },    // En lugar de 40-50
+            p2: { min: 55, max: 75 },    // En lugar de 38-48
+            p3: { min: 50, max: 70 },    // En lugar de 36-46
+            f1: { min: 80, max: 120 },
+            f2: { min: 75, max: 115 },
+            f3: { min: 70, max: 110 }
+        };
+        // Variables 3D
+        const leakParticles = { tramo1: null, tramo2: null, tramo3: null };
+        const needleTargets = [0, 0, 0];
+        const needleAngles = [0, 0, 0];
+        const rotorTargets = [0, 0, 0];
+        const rotorSpeeds = [0, 0, 0];
+        const pressureNeedles = [];
+        const flowRotors = [];
+        const pipeSegments = [];
+
+        // Elementos DOM
+        const statusPanel = document.getElementById('status-panel');
+        const statusText = document.getElementById('status-text');
+        const modeToggle = document.getElementById('mode-toggle');
+        const modeLabel = document.getElementById('mode-label');
+        const resetAllBtn = document.getElementById('reset-all-btn');
+
+        // Controles de Fuga
+        const tramo1Checkbox = document.getElementById('tramo1');
+        const tramo2Checkbox = document.getElementById('tramo2');
+        const tramo3Checkbox = document.getElementById('tramo3');
+        const tramo1Container = document.getElementById('tramo1-container');
+        const tramo2Container = document.getElementById('tramo2-container');
+        const tramo3Container = document.getElementById('tramo3-container');
+
+        const magnitude1Slider = document.getElementById('magnitude1-slider');
+        const magnitude2Slider = document.getElementById('magnitude2-slider');
+        const magnitude3Slider = document.getElementById('magnitude3-slider');
+        const magnitude1Value = document.getElementById('magnitude1-value');
+        const magnitude2Value = document.getElementById('magnitude2-value');
+        const magnitude3Value = document.getElementById('magnitude3-value');
+        const magnitude1Container = document.getElementById('magnitude1-container');
+        const magnitude2Container = document.getElementById('magnitude2-container');
+        const magnitude3Container = document.getElementById('magnitude3-container');
+
+        const panelTab = document.getElementById('panel-tab');
+        const controlPanel = document.getElementById('control-panel');
+        const closePanelBtn = document.getElementById('close-panel-btn');
+        const canvasContainer = document.getElementById('canvas-container');
+
+        // --- UTILIDADES ---
+        function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+        function angleForPressure(pressureInBar) {
+            // 0 bar = -0.4 PI, 6 bar = 0.4 PI
+            const normalized = clamp01(pressureInBar / 6.0);
+            return (normalized - 0.5) * Math.PI * 0.8;
+        }
+
+        function psiToBar(val, unit) {
+            if (val === null) return 0;
+            if (unit === 'PSI') return val * BAR_PER_PSI;
+            return val; // Asume BAR
+        }
+
+        // --- CARGAR RANGOS DE ALERTA DESDE LA BASE DE DATOS ---
+        async function loadAlertRanges() {
+            const urlParams = new URLSearchParams(window.location.search);
+            let arduinoId = urlParams.get('arduino_id');
+
+            if (!arduinoId) {
+                arduinoId = '2'; // ID por defecto para pruebas
+                console.log('⚠️ No hay Arduino ID en URL, usando ID 2 para cargar rangos');
+            }
+
+            try {
+                console.log('📋 Cargando rangos de alerta para Arduino ID:', arduinoId);
+
+                const response = await fetch(`api/rangos.php?arduino_id=${arduinoId}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    rangosAlertas = result.rangos;
+                    console.log('✅ Rangos de alerta cargados:', rangosAlertas);
+                } else {
+                    console.warn('❌ No se pudieron cargar los rangos:', result.message);
+                }
+            } catch (error) {
+                console.error('💥 Error cargando rangos:', error);
+            }
+        }
+
+        // --- RANGOS PERSONALIZADOS ---
+        /*function applyCustomRanges() {
+           // ✅ OBLIGAR a leer los valores actuales de los inputs
+           const newRanges = {
+               p1: { 
+                   min: parseFloat(document.getElementById('p1-min').value) || 40,
+                   max: parseFloat(document.getElementById('p1-max').value) || 50
+               },
+               p2: { 
+                   min: parseFloat(document.getElementById('p2-min').value) || 38,
+                   max: parseFloat(document.getElementById('p2-max').value) || 48
+               },
+               p3: { 
+                   min: parseFloat(document.getElementById('p3-min').value) || 36,
+                   max: parseFloat(document.getElementById('p3-max').value) || 46
+               },
+               f1: { 
+                   min: parseFloat(document.getElementById('f1-min').value) || 80,
+                   max: parseFloat(document.getElementById('f1-max').value) || 120
+               },
+               f2: { 
+                   min: parseFloat(document.getElementById('f2-min').value) || 75,
+                   max: parseFloat(document.getElementById('f2-max').value) || 115
+               },
+               f3: { 
+                   min: parseFloat(document.getElementById('f3-min').value) || 70,
+                   max: parseFloat(document.getElementById('f3-max').value) || 110
+               }
+           };
+           
+           // ✅ REEMPLAZAR COMPLETAMENTE los rangos
+           customRanges = newRanges;
+           
+           console.log('🎯 Rangos personalizados APLICADOS:', customRanges);
+           
+           // ✅ FEEDBACK VISIBLE
+           const btn = document.getElementById('apply-ranges-btn');
+           const originalText = btn.textContent;
+           const originalBg = btn.style.background;
+           
+           btn.textContent = '✅ APLICADO!';
+           btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+           
+           setTimeout(() => {
+               btn.textContent = originalText;
+               btn.style.background = originalBg;
+           }, 2000);
+           
+           // ✅ FORZAR ACTUALIZACIÓN INMEDIATA
+           if (mode === 'simulation') {
+               const currentState = calculateSimulationState();
+               updateVisuals(currentState);
+               console.log('🔄 Simulación actualizada con NUEVOS rangos');
+           }
+       }
+       
+       */
+
+        function applyCustomRanges() {
+            console.log('🎯 INICIANDO aplicación de rangos...');
+
+            // ✅ CAPTURAR VALORES ACTUALES de los inputs
+            const p1Min = parseFloat(document.getElementById('p1-min').value) || 40;
+            const p1Max = parseFloat(document.getElementById('p1-max').value) || 50;
+            const p2Min = parseFloat(document.getElementById('p2-min').value) || 38;
+            const p2Max = parseFloat(document.getElementById('p2-max').value) || 48;
+            const p3Min = parseFloat(document.getElementById('p3-min').value) || 36;
+            const p3Max = parseFloat(document.getElementById('p3-max').value) || 46;
+
+            const f1Min = parseFloat(document.getElementById('f1-min').value) || 80;
+            const f1Max = parseFloat(document.getElementById('f1-max').value) || 120;
+            const f2Min = parseFloat(document.getElementById('f2-min').value) || 75;
+            const f2Max = parseFloat(document.getElementById('f2-max').value) || 115;
+            const f3Min = parseFloat(document.getElementById('f3-min').value) || 70;
+            const f3Max = parseFloat(document.getElementById('f3-max').value) || 110;
+
+            // ✅ REEMPLAZAR COMPLETAMENTE los rangos en memoria
+            customRanges = {
+                p1: { min: p1Min, max: p1Max },
+                p2: { min: p2Min, max: p2Max },
+                p3: { min: p3Min, max: p3Max },
+                f1: { min: f1Min, max: f1Max },
+                f2: { min: f2Min, max: f2Max },
+                f3: { min: f3Min, max: f3Max }
+            };
+
+            console.log('🎯 RANGOS APLICADOS EN MEMORIA:', customRanges);
+
+            // ✅ FEEDBACK VISUAL FUERTE
+            const btn = document.getElementById('apply-ranges-btn');
+            btn.innerHTML = '✅✅✅ APLICADO!';
+            btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+            btn.style.color = 'white';
+            btn.style.fontWeight = 'bold';
+
+            setTimeout(() => {
+                btn.innerHTML = '✅ Aplicar Rangos';
+                btn.style.background = 'linear-gradient(135deg, #8b5cf6, #a78bfa)';
+                btn.style.color = 'white';
+            }, 3000);
+
+            // ✅ FORZAR ACTUALIZACIÓN INMEDIATA Y VISIBLE
+            if (mode === 'simulation') {
+                console.log('🔄 ACTUALIZANDO SIMULACIÓN con nuevos rangos...');
+                const currentState = calculateSimulationState();
+                updateVisuals(currentState);
+
+                // Mostrar mensaje de confirmación
+                // ✅ REEMPLAZAR CON ESTO (sistema de notificaciones):
+                showNotification(`🎯 Rangos aplicados correctamente!<br>P1: ${p1Min}-${p1Max} PSI<br>P2: ${p2Min}-${p2Max} PSI<br>P3: ${p3Min}-${p3Max} PSI`);
+            }
+
+            return false; // Prevenir cualquier comportamiento por defecto
+        }
+        // ✅ FUNCIÓN DE NOTIFICACIÓN NO BLOQUEANTE
+        function showNotification(message) {
+            // Crear elemento de notificación
+            const notification = document.createElement('div');
+            notification.innerHTML = message;
+            notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        padding: 15px 20px;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(16, 185, 129, 0.4);
+        z-index: 10000;
+        font-weight: 600;
+        max-width: 300px;
+        animation: slideInRight 0.3s ease;
+        border: 1px solid rgba(255,255,255,0.2);
+        backdrop-filter: blur(10px);
+    `;
+
+            // Agregar a la página
+            document.body.appendChild(notification);
+
+            // Auto-eliminar después de 4 segundos
+            setTimeout(() => {
+                notification.style.animation = 'slideOutRight 0.3s ease';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 4000);
+        }
+
+        // ✅ AGREGAR ESTAS ANIMACIONES AL CSS
+        const style = document.createElement('style');
+        style.textContent = `
+    @keyframes slideInRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    @keyframes slideOutRight {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+    }
+`;
+        document.head.appendChild(style);
+
+        // ✅ APLICAR RANGOS AUTOMÁTICAMENTE AL CARGAR LA PÁGINA
+        document.addEventListener('DOMContentLoaded', function () {
+            // Esperar a que la página cargue completamente
+            setTimeout(() => {
+                console.log('🚀 Aplicando rangos iniciales...');
+                applyCustomRanges(); // Aplicar los rangos de los inputs inmediatamente
+            }, 1000);
+        });
+
+        // También aplicar cambios cuando se modifiquen los inputs
+        document.querySelectorAll('.range-field').forEach(input => {
+            input.addEventListener('change', function () {
+                applyCustomRanges();
+                // Actualizar inmediatamente si estamos en simulación
+                if (mode === 'simulation') {
+                    updateVisuals(calculateSimulationState());
+                }
+            });
+            input.addEventListener('blur', function () {
+                applyCustomRanges();
+                if (mode === 'simulation') {
+                    updateVisuals(calculateSimulationState());
+                }
+            });
+        });
+
+        // --- DETECCIÓN AUTOMÁTICA DE FUGAS EN MODO LIVE CORREGIDA ---
+        function detectLeaksFromLiveData(liveData) {
+            // Reiniciar todas las fugas primero
+            activeLeaks.tramo1 = activeLeaks.tramo2 = activeLeaks.tramo3 = false;
+            leakMagnitudes.tramo1 = leakMagnitudes.tramo2 = leakMagnitudes.tramo3 = 0;
+
+            // Validar que tenemos datos suficientes
+            if (!liveData.p1.value || !liveData.p2.value || !liveData.p3.value) {
+                console.log('📭 Datos insuficientes para detección de fugas');
+                return;
+            }
+
+            const p1 = liveData.p1.value;
+            const p2 = liveData.p2.value;
+            const p3 = liveData.p3.value;
+            const f1 = liveData.f1.value;
+            const f3 = liveData.f3.value;
+
+            console.log('🔍 Analizando patrones de fuga en datos live...');
+
+            // OBTENER RANGOS DE PRESIÓN DESDE LA BD
+            const rangoP1 = rangosAlertas.find(r => r.tipo_sensor === 'presion' && r.numero_sensor === 1);
+            const rangoP2 = rangosAlertas.find(r => r.tipo_sensor === 'presion' && r.numero_sensor === 2);
+            const rangoP3 = rangosAlertas.find(r => r.tipo_sensor === 'presion' && r.numero_sensor === 3);
+            const rangoF1 = rangosAlertas.find(r => r.tipo_sensor === 'flujo' && r.numero_sensor === 1);
+            const rangoF3 = rangosAlertas.find(r => r.tipo_sensor === 'flujo' && r.numero_sensor === 3);
+
+            // Calcular rangos esperados (valores normales)
+            const presionNormalMin = Math.min(
+                rangoP1?.valor_minimo || 40,
+                rangoP2?.valor_minimo || 38,
+                rangoP3?.valor_minimo || 36
+            );
+
+            const presionNormalMax = Math.max(
+                rangoP1?.valor_maximo || 50,
+                rangoP2?.valor_maximo || 48,
+                rangoP3?.valor_maximo || 46
+            );
+
+            const flujoNormalMin = Math.min(
+                rangoF1?.valor_minimo || 80,
+                rangoF3?.valor_minimo || 75
+            );
+
+            const flujoNormalMax = Math.max(
+                rangoF1?.valor_maximo || 120,
+                rangoF3?.valor_maximo || 115
+            );
+
+            console.log('📊 Rangos de referencia:', {
+                presion: `[${presionNormalMin}-${presionNormalMax}] PSI`,
+                flujo: `[${flujoNormalMin}-${flujoNormalMax}] L/min`
+            });
+
+            // 🚨 DETECCIÓN DE FUGA EN TRAMO 1 (Entre P1 y P2)
+            const diferenciaP1P2 = p1 - p2;
+            const umbralTramo1 = (presionNormalMax - presionNormalMin) * 0.15;
+
+            if (diferenciaP1P2 > umbralTramo1 && p1 >= presionNormalMin) {
+                activeLeaks.tramo1 = true;
+                const diferenciaMaxima = (presionNormalMax - presionNormalMin) * 0.4;
+                leakMagnitudes.tramo1 = Math.min(diferenciaP1P2 / diferenciaMaxima, 1.0);
+                console.log(`💧 Fuga Tramo 1: Dif. presión ${diferenciaP1P2.toFixed(2)} PSI, Magnitud: ${(leakMagnitudes.tramo1 * 100).toFixed(0)}%`);
+            }
+
+            // 🚨 DETECCIÓN DE FUGA EN TRAMO 2 (Entre P2 y P3)  
+            const diferenciaP2P3 = p2 - p3;
+            const umbralTramo2 = (presionNormalMax - presionNormalMin) * 0.12;
+
+            if (diferenciaP2P3 > umbralTramo2 && p2 >= presionNormalMin) {
+                activeLeaks.tramo2 = true;
+                const diferenciaMaxima = (presionNormalMax - presionNormalMin) * 0.35;
+                leakMagnitudes.tramo2 = Math.min(diferenciaP2P3 / diferenciaMaxima, 1.0);
+                console.log(`💧 Fuga Tramo 2: Dif. presión ${diferenciaP2P3.toFixed(2)} PSI, Magnitud: ${(leakMagnitudes.tramo2 * 100).toFixed(0)}%`);
+            }
+
+            // 🚨 DETECCIÓN DE FUGA EN TRAMO 3 (Flujo de salida vs entrada)
+            if (f1 && f3) {
+                const diferenciaF1F3 = f1 - f3;
+                const umbralTramo3 = (flujoNormalMax - flujoNormalMin) * 0.1;
+
+                if (diferenciaF1F3 > umbralTramo3 && p3 >= presionNormalMin) {
+                    activeLeaks.tramo3 = true;
+                    const diferenciaMaxima = (flujoNormalMax - flujoNormalMin) * 0.3;
+                    leakMagnitudes.tramo3 = Math.min(diferenciaF1F3 / diferenciaMaxima, 1.0);
+                    console.log(`💧 Fuga Tramo 3: Pérdida flujo ${diferenciaF1F3.toFixed(0)} L/min, Magnitud: ${(leakMagnitudes.tramo3 * 100).toFixed(0)}%`);
+                }
+            }
+
+            // ✅ CORREGIDO: DETECCIÓN DE FUGAS MÚLTIPLES
+            const diferenciaP1P3 = p1 - p3;
+            const umbralDistribuido = (presionNormalMax - presionNormalMin) * 0.25;
+
+            if (diferenciaP1P3 > umbralDistribuido) {
+                // Si ya hay fuga en tramo2, aumentar su magnitud
+                if (activeLeaks.tramo2) {
+                    leakMagnitudes.tramo2 = Math.min(leakMagnitudes.tramo2 + 0.2, 1.0);
+                    console.log(`📈 Fuga Tramo 2 reforzada por caída general, nueva magnitud: ${(leakMagnitudes.tramo2 * 100).toFixed(0)}%`);
+                }
+                // Si no hay fuga en tramo2 pero sí caída general, activarla
+                else if (!activeLeaks.tramo2) {
+                    activeLeaks.tramo2 = true;
+                    const diferenciaMaxima = (presionNormalMax - presionNormalMin) * 0.6;
+                    leakMagnitudes.tramo2 = Math.min(diferenciaP1P3 / diferenciaMaxima, 0.7);
+                    console.log(`🔍 Fuga distribuida detectada en Tramo 2, Magnitud: ${(leakMagnitudes.tramo2 * 100).toFixed(0)}%`);
+                }
+            }
+
+            // Si no se detectaron fugas
+            if (!activeLeaks.tramo1 && !activeLeaks.tramo2 && !activeLeaks.tramo3) {
+                console.log('✅ No se detectaron fugas en los datos live');
+            } else {
+                console.log('🚨 Resumen fugas detectadas:', {
+                    tramo1: activeLeaks.tramo1 ? `${(leakMagnitudes.tramo1 * 100).toFixed(0)}%` : 'No',
+                    tramo2: activeLeaks.tramo2 ? `${(leakMagnitudes.tramo2 * 100).toFixed(0)}%` : 'No',
+                    tramo3: activeLeaks.tramo3 ? `${(leakMagnitudes.tramo3 * 100).toFixed(0)}%` : 'No'
+                });
+            }
+        }
+
+        // --- ESCENA 3D ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xf0f0f0);
+        scene.fog = new THREE.Fog(0xf0f0f0, 30, 60);
+
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 8, 16);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        canvasContainer.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 8;
+        controls.maxDistance = 30;
+        controls.zoomSpeed = 1.0;
+        controls.panSpeed = 0.8;
+        controls.rotateSpeed = 0.7;
+
+        // Luces
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        directionalLight.position.set(10, 15, 10);
+        directionalLight.castShadow = true;
+        scene.add(directionalLight);
+        const pointLight = new THREE.PointLight(0xffffff, 0.3);
+        pointLight.position.set(0, 8, 0);
+        scene.add(pointLight);
+
+        // Suelo
+        const ground = new THREE.Mesh(
+            new THREE.PlaneGeometry(40, 40),
+            new THREE.MeshStandardMaterial({ color: 0xe5e5e5, roughness: 0.9, metalness: 0.1 })
+        );
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+        scene.add(new THREE.GridHelper(40, 40, 0xcccccc, 0xdddddd));
+
+        // Materiales
+        const tankMaterial = new THREE.MeshStandardMaterial({ color: 0xd0d0d0, roughness: 0.4, metalness: 0.3 });
+        const pipeMaterialBase = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, roughness: 0.3, metalness: 0.2 });
+        const sensorBodyMat = new THREE.MeshStandardMaterial({ color: 0x8b8b8b, roughness: 0.3, metalness: 0.7 });
+        const sensorDialMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2, metalness: 0.1 });
+        const flowHousingMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, roughness: 0.2, metalness: 0.3, transparent: true, opacity: 0.4 });
+        const flowRotorMat = new THREE.MeshStandardMaterial({ color: 0x00bfff, roughness: 0.3, metalness: 0.8 });
+
+        // Textura de flujo
+        function makeFlowCanvas() {
+            const c = document.createElement('canvas');
+            c.width = 256; c.height = 32;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#e0e0e0';
+            ctx.fillRect(0, 0, c.width, c.height);
+            ctx.strokeStyle = '#00bfff';
+            ctx.lineWidth = 2;
+            for (let x = 0; x < c.width; x += 16) {
+                ctx.beginPath();
+                ctx.moveTo(x, 24);
+                ctx.lineTo(x + 8, 8);
+                ctx.stroke();
+            }
+            return c;
+        }
+        const flowTexture = new THREE.CanvasTexture(makeFlowCanvas());
+        flowTexture.wrapS = THREE.RepeatWrapping;
+        flowTexture.wrapT = THREE.RepeatWrapping;
+        flowTexture.repeat.set(6, 1);
+        pipeMaterialBase.map = flowTexture;
+
+        // Funciones de Creación 3D
+        function createPipe(start, end) {
+            const dir = new THREE.Vector3().subVectors(end, start);
+            const len = dir.length();
+            const geo = new THREE.CylinderGeometry(0.15, 0.15, len, 16, 1, false);
+            const mesh = new THREE.Mesh(geo, pipeMaterialBase.clone());
+            mesh.position.copy(start).add(dir.multiplyScalar(0.5));
+            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            return mesh;
+        }
+
+        function createTank(x, y, z) {
+            const g = new THREE.Group();
+            const cyl = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 2, 32), tankMaterial);
+            cyl.castShadow = true; cyl.receiveShadow = true;
+            g.add(cyl);
+            const top = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.2, 32), tankMaterial);
+            top.position.y = 1.1; top.castShadow = true;
+            g.add(top);
+            g.position.set(x, y, z);
+            return g;
+        }
+
+        function createSensor(x, y, z, label, type) {
+            const g = new THREE.Group();
+            if (type === 'pressure') {
+                const body = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.3, 32), sensorBodyMat);
+                body.castShadow = true; g.add(body);
+                const dial = new THREE.Mesh(new THREE.CircleGeometry(0.32, 32), sensorDialMat);
+                dial.position.z = 0.16; g.add(dial);
+
+                // Marcas
+                const markMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+                for (let i = 0; i <= 10; i++) {
+                    const ang = (i / 10) * Math.PI * 0.8 - Math.PI * 0.4;
+                    const m = new THREE.Mesh(new THREE.BoxGeometry(0.01, i % 2 === 0 ? 0.08 : 0.05, 0.01), markMat);
+                    m.position.set(Math.sin(ang) * 0.25, Math.cos(ang) * 0.25, 0.17);
+                    m.rotation.z = -ang;
+                    g.add(m);
+                }
+
+                const needle = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.2, 0.01), new THREE.MeshStandardMaterial({ color: 0xef4444 }));
+                needle.position.set(0, 0.1, 0.18);
+                g.add(needle);
+                g.userData.needle = needle;
+            } else {
+                const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.8, 32), flowHousingMat);
+                housing.rotation.z = Math.PI / 2; housing.castShadow = true; g.add(housing);
+                const rotor = new THREE.Group();
+                for (let i = 0; i < 4; i++) {
+                    const b = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.3, 0.02), flowRotorMat);
+                    b.rotation.y = (Math.PI / 2) * i; rotor.add(b);
+                }
+                rotor.rotation.z = Math.PI / 2;
+                g.add(rotor);
+                g.userData.rotor = rotor;
+            }
+
+            // Etiqueta
+            const cvs = document.createElement('canvas');
+            cvs.width = 128; cvs.height = 64;
+            const ctx = cvs.getContext('2d');
+            ctx.fillStyle = '#2c2c2c';
+            ctx.font = 'bold 48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(label, 64, 48);
+            const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cvs) }));
+            spr.scale.set(0.8, 0.4, 1);
+            spr.position.set(0, 0.6, 0);
+            g.add(spr);
+
+            g.position.set(x, y, z);
+            return g;
+        }
+
+        function createLeakParticles(pos, magnitude) {
+            const count = Math.floor(50 + magnitude * 200);
+            const geo = new THREE.BufferGeometry();
+            const posArr = new Float32Array(count * 3);
+            const spread = 0.3 + magnitude * 0.5;
+            const height = 0.6 + magnitude * 1.0;
+
+            for (let i = 0; i < count; i++) {
+                posArr[i * 3] = (Math.random() - 0.5) * spread;
+                posArr[i * 3 + 1] = Math.random() * height;
+                posArr[i * 3 + 2] = (Math.random() - 0.5) * spread;
+            }
+            geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
+
+            const mat = new THREE.PointsMaterial({
+                color: 0x00bfff,
+                size: 0.05 + magnitude * 0.08,
+                transparent: true,
+                opacity: 0.6 + magnitude * 0.2,
+                blending: THREE.AdditiveBlending
+            });
+            const sys = new THREE.Points(geo, mat);
+            sys.position.copy(pos);
+            sys.userData = { magnitude, spread, height };
+            return sys;
+        }
+
+        // --- CONSTRUCCIÓN DEL SISTEMA CORREGIDA ---
+        scene.add(createTank(-10, 3, 0));
+        scene.add(createTank(10, 3, 0));
+
+        const mainPipe = createPipe(new THREE.Vector3(-9, 3, 0), new THREE.Vector3(9, 3, 0));
+        scene.add(mainPipe);
+        pipeSegments.push(mainPipe);
+        // Verificar cada sensor contra sus rangos - CORREGIDO
+        ['p1', 'p2', 'p3'].forEach((sensorKey, index) => {
+            const sensorData = newState[sensorKey];
+            const sensorValue = sensorData.value;
+
+            if (sensorValue !== null && !isNaN(sensorValue)) {
+                let rango;
+
+                if (mode === 'simulation') {
+                    // ✅ EN MODO SIMULACIÓN: Usar rangos personalizados
+                    rango = customRanges[sensorKey];
+
+                    // ✅ CORREGIDO: CONVERTIR A LA MISMA UNIDAD PARA COMPARAR
+                    let valueToCheck = sensorValue;
+
+                    // Si el sensor está en BAR pero el rango está en PSI, convertir
+                    if (sensorData.unit === 'bar' && rango) {
+                        valueToCheck = sensorValue * 14.5038; // Convertir BAR a PSI
+                        console.log(`🔧 Conversión: ${sensorValue} BAR → ${valueToCheck.toFixed(2)} PSI`);
+                    }
+
+                    if (rango) {
+                        console.log(`🔧 Simulación - ${sensorKey}: ${valueToCheck.toFixed(2)} vs [${rango.min}-${rango.max}]`);
+
+                        if (valueToCheck < rango.min || valueToCheck > rango.max) {
+                            pEls[index].classList.add('alert');
+                            console.log(`🚨 Alerta ${sensorKey}: ${valueToCheck.toFixed(2)} fuera de rango [${rango.min}-${rango.max}]`);
+                        } else {
+                            console.log(`✅ ${sensorKey}: ${valueToCheck.toFixed(2)} dentro de rango [${rango.min}-${rango.max}]`);
+                        }
+                    }
+                } else {
+                    // ✅ EN MODO LIVE: Usar rangos de la base de datos
+                    rango = rangosAlertas.find(r =>
+                        r.tipo_sensor === 'presion' && r.numero_sensor === index + 1
+                    );
+                    if (rango) {
+                        console.log(`🌐 Live - ${sensorKey}: ${sensorValue} vs [${rango.valor_minimo}-${rango.valor_maximo}]`);
+
+                        if (sensorValue < rango.valor_minimo || sensorValue > rango.valor_maximo) {
+                            pEls[index].classList.add('alert');
+                            console.log(`🚨 Alerta ${sensorKey}: ${sensorValue} fuera de rango [${rango.valor_minimo}-${rango.valor_maximo}]`);
+                        }
+                    }
+                }
+            }
+        });
+
+        ['f1', 'f2', 'f3'].forEach((sensorKey, index) => {
+            const sensorValue = newState[sensorKey].value;
+            if (sensorValue !== null && !isNaN(sensorValue)) {
+                let rango;
+
+                if (mode === 'simulation') {
+                    // ✅ EN MODO SIMULACIÓN: Usar rangos personalizados
+                    rango = customRanges[sensorKey];
+
+                    if (rango) {
+                        console.log(`🔧 Simulación - ${sensorKey}: ${sensorValue} vs [${rango.min}-${rango.max}]`);
+
+                        if (sensorValue < rango.min || sensorValue > rango.max) {
+                            fEls[index].classList.add('alert');
+                            console.log(`🚨 Alerta ${sensorKey}: ${sensorValue} fuera de rango [${rango.min}-${rango.max}]`);
+                        } else {
+                            console.log(`✅ ${sensorKey}: ${sensorValue} dentro de rango [${rango.min}-${rango.max}]`);
+                        }
+                    }
+                } else {
+                    // ✅ EN MODO LIVE: Usar rangos de la base de datos
+                    rango = rangosAlertas.find(r =>
+                        r.tipo_sensor === 'flujo' && r.numero_sensor === index + 1
+                    );
+
+                    if (rango) {
+                        if (sensorValue < rango.valor_minimo || sensorValue > rango.valor_maximo) {
+                            fEls[index].classList.add('alert');
+                            console.log(`🚨 Alerta ${sensorKey}: ${sensorValue} fuera de rango [${rango.valor_minimo}-${rango.valor_maximo}]`);
+                        }
+                    }
+                }
+            }
+        });
+        }
+
+        // NUEVA FUNCIÓN: Actualizar estado del sistema considerando rangos
+        function updateSystemStatus(newState) {
+            let msg = '✓ Sistema operando normalmente';
+            let pClass = 'normal';
+            let tClass = 'normal';
+
+            // Verificar si hay alguna alerta por rangos
+            const hasRangeAlert = document.querySelector('.sensor-item.alert') !== null;
+
+            if (mode === 'simulation') {
+                const hasLeak = activeLeaks.tramo1 || activeLeaks.tramo2 || activeLeaks.tramo3;
+
+                if (hasRangeAlert) {
+                    pClass = 'alert';
+                    tClass = 'alert';
+                    msg = '⚠ ALERTA: Valores fuera de rango configurado';
+                } else if (hasLeak) {
+                    pClass = 'alert';
+                    tClass = 'alert';
+                    const leakNames = [];
+                    if (activeLeaks.tramo1) leakNames.push('Tramo 1');
+                    if (activeLeaks.tramo2) leakNames.push('Tramo 2');
+                    if (activeLeaks.tramo3) leakNames.push('Tramo 3');
+                    msg = `⚠ ALERTA: Fuga detectada en ${leakNames.join(', ')}`;
+                }
+            } else {
+                // Live Mode
+                const hasData = Object.values(newState).some(sensor => sensor.value !== null);
+
+                if (!hasData) {
+                    pClass = 'status-error';
+                    tClass = 'alert';
+                    msg = '📭 Esperando datos del Arduino...';
+                } else if (hasRangeAlert) {
+                    pClass = 'alert';
+                    tClass = 'alert';
+                    msg = '⚠ ALERTA (Live): Valores fuera de rango configurado';
+                } else {
+                    const hasLeak = activeLeaks.tramo1 || activeLeaks.tramo2 || activeLeaks.tramo3;
+                    if (hasLeak) {
+                        pClass = 'alert';
+                        tClass = 'alert';
+                        const leakNames = [];
+                        if (activeLeaks.tramo1) leakNames.push('Tramo 1');
+                        if (activeLeaks.tramo2) leakNames.push('Tramo 2');
+                        if (activeLeaks.tramo3) leakNames.push('Tramo 3');
+                        msg = `⚠ ALERTA (Live): Fuga detectada en ${leakNames.join(', ')}`;
+                    } else {
+                        msg = '✅ Sistema operando normalmente (Live)';
+                    }
+                }
+            }
+
+            statusText.textContent = msg;
+            statusPanel.className = `status-panel ${pClass}`;
+            statusText.className = `status-text ${tClass}`;
+        }
+
+        function updateLeakVisuals() {
+            // Actualizar partículas
+            ['tramo1', 'tramo2', 'tramo3'].forEach(t => {
+                if (activeLeaks[t]) {
+                    if (leakParticles[t]) scene.remove(leakParticles[t]);
+                    leakParticles[t] = createLeakParticles(leakPositions[t], leakMagnitudes[t]);
+                    scene.add(leakParticles[t]);
+                    document.getElementById(`${t}-container`).classList.add('active');
+                    document.getElementById(`magnitude${t.slice(-1)}-container`).classList.add('visible');
+                } else {
+                    if (leakParticles[t]) { scene.remove(leakParticles[t]); leakParticles[t] = null; }
+                    document.getElementById(`${t}-container`).classList.remove('active');
+                    document.getElementById(`magnitude${t.slice(-1)}-container`).classList.remove('visible');
+                }
+            });
+
+            if (mode === 'simulation') {
+                updateVisuals(calculateSimulationState());
+            }
+        }
+
+        // --- API LIVE ---
+        async function fetchSensorDataFromAPI() {
+            if (mode !== 'live') return;
+
+            // Obtener arduino_id de la URL - SI NO HAY, USAR ID 2 PARA PRUEBAS
+            const urlParams = new URLSearchParams(window.location.search);
+            let arduinoId = urlParams.get('arduino_id');
+
+            // Si no hay ID en la URL, usar ID 2 para pruebas
+            if (!arduinoId) {
+                arduinoId = '2';
+                console.log('Usando Arduino ID 2 para pruebas');
+            }
+
+            try {
+                console.log('🔍 Buscando datos para Arduino ID:', arduinoId);
+
+                // OBTENER DATOS DE PRESIÓN
+                const presionPromises = [];
+                for (let i = 1; i <= 3; i++) {
+                    presionPromises.push(
+                        fetch(`api/lecturas.php?arduino_id=${arduinoId}&tipo_sensor=presion&numero_sensor=${i}&time_range=1h&limit=1`)
+                            .then(res => res.json())
+                            .then(data => ({ tipo: 'presion', numero: i, data }))
+                    );
+                }
+
+                // OBTENER DATOS DE FLUJO
+                const flujoPromises = [];
+                for (let i = 1; i <= 3; i++) {
+                    flujoPromises.push(
+                        fetch(`api/lecturas.php?arduino_id=${arduinoId}&tipo_sensor=flujo&numero_sensor=${i}&time_range=1h&limit=1`)
+                            .then(res => res.json())
+                            .then(data => ({ tipo: 'flujo', numero: i, data }))
+                    );
+                }
+
+                // Esperar todas las peticiones
+                const [presionResults, flujoResults] = await Promise.all([
+                    Promise.all(presionPromises),
+                    Promise.all(flujoPromises)
+                ]);
+
+                console.log('📡 Resultados de presión:', presionResults);
+                console.log('📡 Resultados de flujo:', flujoResults);
+
+                // Crear el estado con los datos reales
+                const newState = {
+                    p1: { value: null, unit: 'PSI' },
+                    p2: { value: null, unit: 'PSI' },
+                    p3: { value: null, unit: 'PSI' },
+                    f1: { value: null, unit: 'L/min' },
+                    f2: { value: null, unit: 'L/min' },
+                    f3: { value: null, unit: 'L/min' }
+                };
+
+                // Procesar datos de presión
+                presionResults.forEach(result => {
+                    if (result.data.success && result.data.lecturas && result.data.lecturas.length > 0) {
+                        const lectura = result.data.lecturas[0];
+                        const key = `p${result.numero}`;
+                        newState[key] = {
+                            value: parseFloat(lectura.valor),
+                            unit: 'PSI'
+                        };
+                        console.log(`✅ Presión ${result.numero}: ${lectura.valor} PSI`);
+                    } else {
+                        console.warn(`❌ Sin datos de presión ${result.numero}`);
+                    }
+                });
+
+                // Procesar datos de flujo
+                flujoResults.forEach(result => {
+                    if (result.data.success && result.data.lecturas && result.data.lecturas.length > 0) {
+                        const lectura = result.data.lecturas[0];
+                        const key = `f${result.numero}`;
+                        newState[key] = {
+                            value: parseFloat(lectura.valor),
+                            unit: 'L/min'
+                        };
+                        console.log(`✅ Flujo ${result.numero}: ${lectura.valor} L/min`);
+                    } else {
+                        console.warn(`❌ Sin datos de flujo ${result.numero}`);
+                    }
+                });
+
+                console.log('🎨 Estado final para visualización:', newState);
+
+                // 🚨 DETECTAR FUGAS AUTOMÁTICAMENTE EN MODO LIVE
+                detectLeaksFromLiveData(newState);
+
+                // 🚨 ACTUALIZAR PARTÍCULAS VISUALES
+                updateLeakVisuals();
+
+                // Actualizar visualización
+                updateVisuals(newState);
+
+                // Verificar si hay datos
+                const hasData = Object.values(newState).some(sensor => sensor.value !== null);
+
+                if (hasData) {
+                    const hasLeak = activeLeaks.tramo1 || activeLeaks.tramo2 || activeLeaks.tramo3;
+                    if (hasLeak) {
+                        statusText.textContent = `⚠ ALERTA (Live): Fugas detectadas (Arduino ${arduinoId})`;
+                        statusPanel.className = "status-panel alert";
+                        statusText.className = "status-text alert";
+                    } else {
+                        statusText.textContent = `✅ Live: Sistema normal (Arduino ${arduinoId})`;
+                        statusPanel.className = "status-panel normal";
+                        statusText.className = "status-text normal";
+                    }
+                } else {
+                    statusText.textContent = `📭 Arduino ${arduinoId} - Esperando datos...`;
+                    statusPanel.className = "status-panel status-error";
+                    statusText.className = "status-text alert";
+                }
+
+            } catch (e) {
+                console.error('💥 Error de conexión API:', e);
+
+                const emptyState = {
+                    p1: { value: null, unit: 'PSI' },
+                    p2: { value: null, unit: 'PSI' },
+                    p3: { value: null, unit: 'PSI' },
+                    f1: { value: null, unit: 'L/min' },
+                    f2: { value: null, unit: 'L/min' },
+                    f3: { value: null, unit: 'L/min' }
+                };
+                updateVisuals(emptyState);
+
+                // También limpiar fugas en caso de error
+                activeLeaks.tramo1 = activeLeaks.tramo2 = activeLeaks.tramo3 = false;
+                updateLeakVisuals();
+
+                statusText.textContent = "❌ Error de conexión - Ver consola";
+                statusPanel.className = "status-panel status-error";
+                statusText.className = "status-text alert";
+            }
+        }
+
+        // --- INTERACCIÓN ---
+        function makeValueEditable(id, key) {
+            const el = document.querySelector(`#${id} .sensor-value`);
+            if (!el) return;
+            const newEl = el.cloneNode(true);
+            el.parentNode.replaceChild(newEl, el);
+
+            newEl.addEventListener('click', () => {
+                if (mode !== 'simulation') return;
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.value = baseValues[key];
+                input.style.width = '80px';
+                input.style.fontSize = '20px';
+
+                newEl.innerHTML = '';
+                newEl.appendChild(input);
+                input.focus();
+                input.select();
+
+                const save = () => {
+                    const val = parseFloat(input.value);
+                    if (!isNaN(val) && val >= 0) {
+                        baseValues[key] = val;
+                        updateVisuals(calculateSimulationState());
+                    }
+                };
+                input.addEventListener('blur', save);
+                input.addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+            });
+        }
+
+        ['pressure1', 'pressure2', 'pressure3', 'flow1', 'flow2', 'flow3'].forEach((id, i) => {
+            const keys = ['p1', 'p2', 'p3', 'f1', 'f2', 'f3'];
+            makeValueEditable(id, keys[i]);
+        });
+
+        // Listeners de UI
+        modeToggle.addEventListener('click', () => {
+            if (mode === 'simulation') {
+                mode = 'live';
+                modeToggle.classList.add('on');
+                modeLabel.textContent = 'Modo: Live (API)';
+                modeLabel.classList.add('live');
+                // Desactivar controles sim
+                [tramo1Checkbox, tramo2Checkbox, tramo3Checkbox].forEach(c => c.disabled = true);
+                [magnitude1Slider, magnitude2Slider, magnitude3Slider].forEach(s => s.disabled = true);
+
+                fetchSensorDataFromAPI();
+                apiInterval = setInterval(fetchSensorDataFromAPI, 2000);
+            } else {
+                mode = 'simulation';
+                modeToggle.classList.remove('on');
+                modeLabel.textContent = 'Modo: Simulación';
+                modeLabel.classList.remove('live');
+                [tramo1Checkbox, tramo2Checkbox, tramo3Checkbox].forEach(c => c.disabled = false);
+                [magnitude1Slider, magnitude2Slider, magnitude3Slider].forEach(s => s.disabled = false);
+
+                if (apiInterval) clearInterval(apiInterval);
+
+                // Limpiar fugas al cambiar a simulación
+                activeLeaks.tramo1 = activeLeaks.tramo2 = activeLeaks.tramo3 = false;
+                updateLeakVisuals();
+
+                // CARGAR RANGOS AL CAMBIAR A MODO SIMULACIÓN
+                loadAlertRanges().then(() => {
+                    updateVisuals(calculateSimulationState());
+                });
+            }
+        });
+
+        resetAllBtn.addEventListener('click', () => {
+            activeLeaks.tramo1 = activeLeaks.tramo2 = activeLeaks.tramo3 = false;
+            tramo1Checkbox.checked = tramo2Checkbox.checked = tramo3Checkbox.checked = false;
+            leakMagnitudes.tramo1 = leakMagnitudes.tramo2 = leakMagnitudes.tramo3 = 0.5;
+            magnitude1Slider.value = magnitude2Slider.value = magnitude3Slider.value = 50;
+            magnitude1Value.textContent = magnitude2Value.textContent = magnitude3Value.textContent = '50%';
+
+            // Forzar actualización en ambos modos
+            updateLeakVisuals();
+
+            // Si está en modo Live, forzar recarga de datos
+            if (mode === 'live') {
+                fetchSensorDataFromAPI();
+            } else {
+                updateVisuals(calculateSimulationState());
+            }
+        });
+
+        [tramo1Checkbox, tramo2Checkbox, tramo3Checkbox].forEach((cb, i) => {
+            cb.addEventListener('change', e => {
+                activeLeaks[`tramo${i + 1}`] = e.target.checked;
+                updateLeakVisuals();
+            });
+        });
+
+        [magnitude1Slider, magnitude2Slider, magnitude3Slider].forEach((sl, i) => {
+            sl.addEventListener('input', e => {
+                const val = parseInt(e.target.value);
+                leakMagnitudes[`tramo${i + 1}`] = val / 100;
+                document.getElementById(`magnitude${i + 1}-value`).textContent = val + '%';
+                if (activeLeaks[`tramo${i + 1}`]) updateLeakVisuals();
+            });
+        });
+
+        // Panel lateral
+        panelTab.addEventListener('click', () => {
+            controlPanel.classList.add('open');
+            panelTab.classList.add('hidden');
+            canvasContainer.classList.add('panel-open');
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 400);
+        });
+        closePanelBtn.addEventListener('click', () => {
+            controlPanel.classList.remove('open');
+            panelTab.classList.remove('hidden');
+            canvasContainer.classList.remove('panel-open');
+            setTimeout(() => window.dispatchEvent(new Event('resize')), 400);
+        });
+
+        // --- ANIMACIÓN ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Interpolar agujas y rotores
+            for (let i = 0; i < 3; i++) {
+                needleAngles[i] = THREE.MathUtils.lerp(needleAngles[i], needleTargets[i], 0.1);
+                if (pressureNeedles[i]) pressureNeedles[i].rotation.z = needleAngles[i];
+
+                rotorSpeeds[i] = THREE.MathUtils.lerp(rotorSpeeds[i], rotorTargets[i], 0.05);
+                if (flowRotors[i]) flowRotors[i].rotation.x += 0.2 * rotorSpeeds[i];
+            }
+
+            // Animar flujo en tuberías (Textura)
+            const avgSpeed = (rotorSpeeds[0] + rotorSpeeds[1] + rotorSpeeds[2]) / 3;
+            // Mover textura solo si hay flujo
+            if (avgSpeed > 0.01) {
+                pipeSegments.forEach(seg => {
+                    if (seg.material.map) {
+                        seg.material.map.offset.x = (seg.material.map.offset.x - 0.01 * (avgSpeed + 0.1)) % 1;
+                    }
+                });
+            }
+
+            // Animar partículas de fuga
+            Object.values(leakParticles).forEach(p => {
+                if (!p) return;
+                const arr = p.geometry.attributes.position.array;
+                const speed = 0.05 + (p.userData.magnitude || 0.5) * 0.05;
+                for (let i = 0; i < arr.length; i += 3) {
+                    arr[i + 1] -= speed;
+                    if (arr[i + 1] < -1) {
+                        arr[i] = (Math.random() - 0.5) * p.userData.spread;
+                        arr[i + 1] = p.userData.height;
+                        arr[i + 2] = (Math.random() - 0.5) * p.userData.spread;
+                    }
+                }
+                p.geometry.attributes.position.needsUpdate = true;
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Iniciar
+        updateVisuals(systemState);
+
+        // CARGAR RANGOS AL INICIAR
+        loadAlertRanges().then(() => {
+            console.log('🎮 Simulador iniciado');
+        });
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            const w = controlPanel.classList.contains('open') ? window.innerWidth - 320 : window.innerWidth;
+            camera.aspect = w / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, window.innerHeight);
+        });
+    </script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.getElementById('apply-ranges-btn').addEventListener('click', function () {
+                alert('¡Rangos aplicados!');
+                // Aquí va tu lógica para procesar los rangos
+                console.log('Botón funcionando correctamente');
+            });
+        });
+    </script>
+</body>
+
+</html>

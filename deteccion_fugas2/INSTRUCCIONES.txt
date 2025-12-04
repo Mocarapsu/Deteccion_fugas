@@ -1,0 +1,3 @@
+# Ya no usamos restore, mejor iniciamos con el archivo del usuario
+print("Por favor haz Ctrl+Z (Deshacer) en el editor hasta que el archivo esté sin errores")
+print("Luego guarda el archivo y yo agregaré el código necesario con un método diferente")
